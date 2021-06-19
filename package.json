@@ -4,7 +4,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "serve": "vite preview"
+    "serve": "vite preview",
+    "build-static-for-github-pages": "yarn build --base /noise-level-exporter/ && rm -r docs && mv dist docs && git add . && git commit -m 'build static'"
   },
   "devDependencies": {
     "typescript": "^4.3.2",
