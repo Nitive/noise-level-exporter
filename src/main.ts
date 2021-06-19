@@ -73,9 +73,11 @@ async function initExporter(params: StartFormParams) {
   <div class="chart-container">
     <canvas id="chart"></canvas>
   </div>
+  <pre class="js-errors"></pre>
 `
 
   const $noiseLevel = document.querySelector(".js-noise-level")!
+  const $errors = document.querySelector(".js-errors")!
 
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: true,
@@ -288,7 +290,7 @@ async function initExporter(params: StartFormParams) {
 
   async function sendMetrics() {
     try {
-      const pushgatewayURL =
+      const lokiURL =
         "https://thingproxy.freeboard.io/fetch/https://logs-prod-us-central1.grafana.net/loki/api/v1/push"
 
       const log = {
@@ -303,10 +305,8 @@ async function initExporter(params: StartFormParams) {
         ],
       }
 
-      const res = await fetch(pushgatewayURL, {
+      const res = await fetch(lokiURL, {
         method: "POST",
-        mode: "cors",
-        referrerPolicy: "no-referrer",
         headers: {
           Accept: "application/json",
           "Content-Type": "application/json",
@@ -320,6 +320,7 @@ async function initExporter(params: StartFormParams) {
       }
     } catch (err) {
       console.error(err)
+      $errors.textContent += err.toString() + '\n'
     }
   }
 }
