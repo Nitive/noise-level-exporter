@@ -103,6 +103,7 @@ async function initExporter(params: StartFormParams) {
     periodID: number
     time: number
     measurements: number[]
+    logSent?: boolean
   }
 
   const periodSeconds = 3
@@ -163,16 +164,17 @@ async function initExporter(params: StartFormParams) {
       )
     }
 
-    function getLogLine() {
-      const group = last(measurementsByPeriods)
-      if (!group) {
-        return undefined
-      }
+    function getLogLines() {
+      const groups = measurementsByPeriods.filter((group) => !group.logSent)
 
-      return [
+      groups.forEach((group) => {
+        group.logSent = true
+      })
+
+      return groups.map((group) => [
         String(group.time * 1_000_000),
         JSON.stringify({ avg: avg(group.measurements) }),
-      ]
+      ])
     }
 
     return {
@@ -180,7 +182,7 @@ async function initExporter(params: StartFormParams) {
       getLastPeriodsMeasurements,
       getPeriodID,
       getNoiseLevelTotal,
-      getLogLine,
+      getLogLines,
     }
   }
 
@@ -297,7 +299,7 @@ async function initExporter(params: StartFormParams) {
               job: "noise_level",
               device: params.device,
             },
-            values: [store.getLogLine()],
+            values: store.getLogLines(),
           },
         ],
       }
