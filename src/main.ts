@@ -290,9 +290,6 @@ async function initExporter(params: StartFormParams) {
 
   async function sendMetrics() {
     try {
-      const lokiURL =
-        "https://thingproxy.freeboard.io/fetch/https://logs-prod-us-central1.grafana.net/loki/api/v1/push"
-
       const log = {
         streams: [
           {
@@ -305,22 +302,20 @@ async function initExporter(params: StartFormParams) {
         ],
       }
 
-      const res = await fetch(lokiURL, {
+      const res = await fetch("/api/save-log", {
         method: "POST",
         headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
           Authorization: `Basic ${btoa(params.lokiBasicAuth)}`,
         },
         body: JSON.stringify(log),
       })
 
       if (res.status >= 300) {
-        throw new Error(await res.text())
+        throw new Error("Bad response status code (see server logs)")
       }
     } catch (err) {
       console.error(err)
-      $errors.textContent += err.toString() + '\n'
+      $errors.textContent += err.toString() + "\n"
     }
   }
 }
