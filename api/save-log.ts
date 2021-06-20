@@ -18,7 +18,7 @@ export default async (req: VercelRequest, res: VercelResponse) => {
         Accept: "application/json",
         "Content-Type": "application/json",
         Authorization: req.headers.authorization,
-      },
+      } as any,
       body: req.body,
     })
 

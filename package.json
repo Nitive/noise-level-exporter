@@ -3,8 +3,7 @@
   "license": "MIT",
   "scripts": {
     "vite": "vite --port $PORT --strictPort",
-    "build": "tsc && vite build",
-    "dev": "vercel dev"
+    "build": "tsc && vite build"
   },
   "devDependencies": {
     "@types/node-fetch": "^2.5.10",

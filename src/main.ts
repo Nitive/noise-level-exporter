@@ -32,7 +32,7 @@ function main() {
         <span class="label">
           Device name:
         </span>
-        <input name="device" value="${params.device || ""}">
+        <input name="device" autofocus value="${params.device || ""}">
       </label>
       <br>
 
@@ -53,6 +53,7 @@ function main() {
   const form = document.querySelector(".js-start-form")!
 
   form.addEventListener("submit", (e) => {
+    e.preventDefault()
     const params: StartFormParams = Object.fromEntries(
       (new FormData(e.target as any) as any).entries()
     ) as any
@@ -117,13 +118,22 @@ async function initExporter(params: StartFormParams) {
     return sum(nums) / nums.length
   }
 
+  function quantiles(thresholds: number[], sortedNums: number[]) {
+    return thresholds.map((threshold) => {
+      const result = sortedNums[Math.round((sortedNums.length - 1) * threshold)]
+      if (result === undefined) {
+        console.error({ result, sortedNums, threshold })
+      }
+      return result
+    })
+  }
+
   function last<T>(arr: T[]): T {
     return arr[arr.length - 1]
   }
 
   function createStore() {
     let measurementsByPeriods: MeasurementsByPeriod[] = []
-    let noiseLevelTotalForRemovedMeasurements = 0
 
     function getPeriodID(now: number) {
       return Math.floor(now / 1000 / periodSeconds)
@@ -138,30 +148,30 @@ async function initExporter(params: StartFormParams) {
         currentPeriodMeasurements.periodID !== periodID
       ) {
         currentPeriodMeasurements = { periodID, time: now, measurements: [] }
+
+        if (measurementsByPeriods.length > 0) {
+          last(measurementsByPeriods).measurements.sort()
+        }
+
         measurementsByPeriods.push(currentPeriodMeasurements)
+        measurementsByPeriods = measurementsByPeriods.slice(-10)
       }
 
       currentPeriodMeasurements.measurements.push(measurement)
+    }
 
-      noiseLevelTotalForRemovedMeasurements += sum(
-        measurementsByPeriods
-          .slice(0, -keepPeriods)
-          .map((group) => avg(group.measurements))
+    function getMetrics(measurements: number[]) {
+      const [q50, q75, q90, q95, q99, q100] = quantiles(
+        [0.5, 0.75, 0.9, 0.95, 0.99, 1],
+        measurements
       )
-      measurementsByPeriods = measurementsByPeriods.slice(-10)
+      return { q50, q75, q90, q95, q99, max: q100, avg: avg(measurements) }
     }
 
     function getLastPeriodsMeasurements() {
-      return measurementsByPeriods
-        .slice(-1 - keepPeriods, -1)
-        .map((group) => avg(group.measurements))
-    }
-
-    function getNoiseLevelTotal() {
-      return (
-        noiseLevelTotalForRemovedMeasurements +
-        sum(measurementsByPeriods.map((group) => avg(group.measurements)))
-      )
+      return measurementsByPeriods.slice(-1 - keepPeriods, -1).map((group) => {
+        return getMetrics(group.measurements)
+      })
     }
 
     function getLogLines() {
@@ -171,17 +181,18 @@ async function initExporter(params: StartFormParams) {
         group.logSent = true
       })
 
-      return groups.map((group) => [
-        String(group.time * 1_000_000),
-        JSON.stringify({ avg: avg(group.measurements) }),
-      ])
+      return groups.map((group) => {
+        return [
+          String(group.time * 1_000_000),
+          JSON.stringify(getMetrics(group.measurements)),
+        ]
+      })
     }
 
     return {
       addMeasurement,
       getLastPeriodsMeasurements,
       getPeriodID,
-      getNoiseLevelTotal,
       getLogLines,
     }
   }
@@ -204,30 +215,16 @@ async function initExporter(params: StartFormParams) {
 
   window.requestAnimationFrame(onFrame)
 
-  type Color = "blue" | "orange" | "red"
+  function transparent(color: string) {
+    return color.replace(")", ", 0.2)")
+  }
 
-  const bgColors = {
-    blue: "rgba(54, 162, 235, 0.2)",
-    orange: "rgba(255, 159, 64, 0.2)",
-    red: "rgba(255, 99, 132, 0.2)",
-  } as const
-
-  const borderColors = {
+  const colors = {
     blue: "rgb(54, 162, 235)",
     orange: "rgb(255, 159, 64)",
     red: "rgb(255, 99, 132)",
-  } as const
-
-  function getColor(measurementsAvg: number): Color {
-    if (measurementsAvg > 0.4) {
-      return "red"
-    }
-
-    if (measurementsAvg > 0.2) {
-      return "orange"
-    }
-
-    return "blue"
+    purple: "rgb(153, 102, 255)",
+    seagreen: "rgb(75, 192, 192)",
   }
 
   function getChartData() {
@@ -241,11 +238,33 @@ async function initExporter(params: StartFormParams) {
       labels,
       datasets: [
         {
-          label: "Noise level",
-          data,
-          backgroundColor: data.map((y) => bgColors[getColor(y)]),
-          borderColor: data.map((y) => borderColors[getColor(y)]),
+          label: "75% were louder then",
+          data: data.map((x) => x.q75),
+          borderColor: colors.seagreen,
+          backgroundColor: transparent(colors.blue),
           borderWidth: 1,
+        },
+        {
+          label: "95% were lounder then",
+          data: data.map((x) => x.q95),
+          borderColor: colors.blue,
+          backgroundColor: transparent(colors.seagreen),
+          borderWidth: 1,
+        },
+        {
+          label: "99% were lounder then",
+          data: data.map((x) => x.q99),
+          borderColor: colors.purple,
+          backgroundColor: transparent(colors.purple),
+          borderWidth: 1,
+        },
+        {
+          label: "100% were lounder then",
+          data: data.map((x) => x.max),
+          borderColor: colors.red,
+          backgroundColor: transparent(colors.red),
+          borderWidth: 1,
+          borderDash: [10],
         },
       ],
     }
@@ -253,7 +272,7 @@ async function initExporter(params: StartFormParams) {
 
   function createChart(chartData: ChartData) {
     return new Chart(document.getElementById("chart") as HTMLCanvasElement, {
-      type: "bar",
+      type: "line",
       data: chartData,
       options: {
         animation: {
@@ -262,7 +281,7 @@ async function initExporter(params: StartFormParams) {
         scales: {
           y: {
             beginAtZero: true,
-            suggestedMax: 1,
+            suggestedMax: 0.5,
           },
         },
       },
